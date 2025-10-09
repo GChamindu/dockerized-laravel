@@ -2,8 +2,9 @@
 FROM php:8.2-fpm
 
 # Set working directory
-WORKDIR /var/www
+WORKDIR /var/www/html
 
+COPY . .
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
     git \
@@ -20,14 +21,14 @@ RUN apt-get update && apt-get install -y \
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
 # Copy project files (from context: laravel-app/)
-COPY app/ .
+COPY composer.json .
+
 
 # Install PHP dependencies
-RUN composer install --no-interaction --prefer-dist --optimize-autoloader
-
+RUN composer install
 # Permissions (use www-data user)
 RUN chown -R www-data:www-data /var/www
-RUN chmod -R 755 /var/www/storage
+RUN chmod -R 755 /var/www/html/storage
 
 # Expose port for FPM
 EXPOSE 9000
