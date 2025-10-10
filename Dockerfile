@@ -1,10 +1,8 @@
-# Use official PHP image with extensions
+# Use official PHP 8.2 FPM image
 FROM php:8.2-fpm
 
-# Set working directory
 WORKDIR /var/www
 
-COPY . .
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
     git \
@@ -20,18 +18,20 @@ RUN apt-get update && apt-get install -y \
 # Install Composer
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
-# Copy project files (from context: laravel-app/)
-COPY composer.json .
+# Copy composer files first for caching
+COPY composer.json composer.lock ./
 
+# Disable auto-scripts to prevent artisan errors
+RUN composer install --no-scripts --no-interaction --prefer-dist --optimize-autoloader
 
-# Install PHP dependencies
-RUN composer install
-# Permissions (use www-data user)
-RUN chown -R www-data:www-data /var/www
-RUN chmod -R 755 /var/www/storage
+# Copy rest of the app
+COPY . .
 
-# Expose port for FPM
+# Fix permissions
+RUN mkdir -p /var/www/storage /var/www/bootstrap/cache \
+    && chown -R www-data:www-data /var/www \
+    && chmod -R 777 /var/www/storage /var/www/bootstrap/cache
+
 EXPOSE 9000
 
-# Start PHP-FPM
 CMD ["php-fpm"]

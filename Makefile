@@ -15,12 +15,14 @@ down:
 build:
 	@if [ ! -f ./.env ]; then cp ./.env.example ./.env; fi
 	@UID=${UID} GID=${GID} docker compose up --build -d --remove-orphans
+	@echo "⏳ Waiting for MySQL to be ready..."
+	@sleep 15
 	@docker exec laravel_app /bin/sh -c "\
 		composer install --no-interaction --prefer-dist --optimize-autoloader && \
 		chmod -R 777 storage/ bootstrap/cache/ && \
 		php artisan key:generate && \
 		php artisan config:clear && \
-	
+		php artisan cache:clear && \
 		php artisan route:clear && \
 		php artisan view:clear && \
 		php artisan migrate --force"
