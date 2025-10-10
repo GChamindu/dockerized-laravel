@@ -2,7 +2,7 @@
 FROM php:8.2-fpm
 
 # Set working directory
-WORKDIR /var/www/html
+WORKDIR /var/www
 
 COPY . .
 # Install system dependencies
@@ -28,7 +28,7 @@ COPY composer.json .
 RUN composer install
 # Permissions (use www-data user)
 RUN chown -R www-data:www-data /var/www
-RUN chmod -R 755 /var/www/html/storage
+RUN chmod -R 755 /var/www/storage
 
 # Expose port for FPM
 EXPOSE 9000
