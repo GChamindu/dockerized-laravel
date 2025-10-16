@@ -1,0 +1,64 @@
+name: Laravel CI/CD
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+
+    services:
+      mysql-test:  # Temp DB for tests
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: testroot
+          MYSQL_DATABASE: laravel_test
+          MYSQL_USER: laravel
+          MYSQL_PASSWORD: ${{ secrets.DB_TEST_PASSWORD }}
+        ports:
+          - 3307:3306
+        options: >-
+          --health-cmd "mysqladmin ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up PHP
+      uses: shivammathur/setup-php@v2
+      with:
+        php-version: '8.2'
+
+    - name: Install Composer dependencies
+      run: |
+        cp .env.example .env
+        echo "DB_DATABASE=laravel_test" >> .env
+        echo "DB_USERNAME=laravel" >> .env
+        echo "DB_PASSWORD=${{ secrets.DB_TEST_PASSWORD }}" >> .env
+        echo "DB_HOST=mysql-test" >> .env
+        echo "DB_PORT=3306" >> .env
+        composer install --no-interaction --prefer-dist --optimize-autoloader
+
+    - name: Lint code (optional, for PHP)
+      run: composer run lint  # Or install phpcs: composer require --dev squizlabs/php_codesniffer && vendor/bin/phpcs
+
+    - name: Copy env and generate key
+      run: |
+        php artisan key:generate --force
+
+    - name: Run migrations for tests
+      run: php artisan migrate --force
+
+    - name: Run PHPUnit tests
+      run: php artisan test  # Or ./vendor/bin/phpunit
+
+    - name: Build Docker image
+      run: |
+        docker build -t laravel-app:test -f Dockerfile .
+        # Test run (optional): docker run --rm -e DB_HOST=host.docker.internal -p 9000:9000 laravel-app:test php-fpm
