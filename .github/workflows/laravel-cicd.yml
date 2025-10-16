@@ -35,18 +35,18 @@ jobs:
       with:
         php-version: '8.2'
 
-    - name: Install Composer dependencies (prod)
+    - name: Install Composer dependencies
       run: |
-        cp .env.example .env
+        # Copy example env if it doesn't exist
+        cp .env.example .env || touch .env
+        # Override DB settings for CI tests
         echo "DB_DATABASE=laravel_test" >> .env
         echo "DB_USERNAME=laravel" >> .env
         echo "DB_PASSWORD=${{ secrets.DB_TEST_PASSWORD }}" >> .env
         echo "DB_HOST=mysql-test" >> .env
         echo "DB_PORT=3306" >> .env
-        composer install --no-interaction --prefer-dist --optimize-autoloader --no-dev
-
-    - name: Install dev dependencies for linting and tests
-      run: composer install --no-interaction --prefer-dist --no-scripts --only=dev
+        # Install all dependencies (prod + dev) for CI needs like linting and tests
+        composer install --no-interaction --prefer-dist --optimize-autoloader
 
     - name: Lint code
       run: composer run lint  # Assumes "lint": "phpcs" in composer.json; add if missing
