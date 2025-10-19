@@ -44,7 +44,8 @@ jobs:
         run: docker run --rm -v $(pwd):/var/www laravel-practice-test php artisan key:generate --force
 
       - name: Set Storage Permissions
-        run: chmod -R 777 storage bootstrap/cache
+        run: docker run --rm -v $(pwd):/var/www laravel-practice-test bash -c "chmod -R 777 storage bootstrap/cache"
+
 
       - name: Run Migrations & Tests
         env:
