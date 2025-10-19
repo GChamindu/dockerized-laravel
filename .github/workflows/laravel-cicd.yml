@@ -31,53 +31,48 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Install MySQL Client
-        run: sudo apt-get update && sudo apt-get install -y mysql-client
-
-      - name: Set up PHP
-        uses: shivammathur/setup-php@v2
-        with:
-          php-version: 8.2
-          extensions: mbstring, pdo_mysql, bcmath, gd
-          ini-values: post_max_size=256M, upload_max_filesize=256M
-
-      - name: Install Composer
-        run: composer install --no-interaction --prefer-dist --optimize-autoloader
+      - name: Build Docker Test Image
+        run: docker build -t laravel-practice-test .
 
       - name: Copy .env.example to .env
         run: cp .env.example .env
 
       - name: Generate App Key
-        run: php artisan key:generate --force
+        run: docker run --rm -v $(pwd):/var/www laravel-practice-test php artisan key:generate --force
 
       - name: Set Storage Permissions
-        run: chmod -R 777 storage bootstrap/cache
+        run: docker run --rm -v $(pwd):/var/www laravel-practice-test bash -c "chmod -R 777 storage bootstrap/cache"
 
-      - name: Wait for MySQL service
+      - name: Wait for MySQL to be ready
         run: |
-          echo "Checking MySQL connection..."
-          mysql -h mysql-test -u laravel -p${{ secrets.DB_TEST_PASSWORD }} -e "SELECT 1;"
+          echo "Waiting for MySQL..."
+          until docker run --rm --network host laravel-practice-test \
+            bash -c "mysql -h 127.0.0.1 -P 3306 -u laravel -p${{ secrets.DB_TEST_PASSWORD }} -e 'SELECT 1;'" &> /dev/null; do
+            sleep 2
+          done
           echo "MySQL is ready!"
 
       - name: Run Migrations
-        env:
-          DB_CONNECTION: mysql
-          DB_HOST: mysql-test
-          DB_PORT: 3306
-          DB_DATABASE: laravel_test
-          DB_USERNAME: laravel
-          DB_PASSWORD: ${{ secrets.DB_TEST_PASSWORD }}
-        run: php artisan migrate --force
+        run: |
+          docker run --rm -v $(pwd):/var/www --network host \
+            -e DB_CONNECTION=mysql \
+            -e DB_HOST=127.0.0.1 \
+            -e DB_PORT=3306 \
+            -e DB_DATABASE=laravel_test \
+            -e DB_USERNAME=laravel \
+            -e DB_PASSWORD=${{ secrets.DB_TEST_PASSWORD }} \
+            laravel-practice-test php artisan migrate --force
 
       - name: Run Tests
-        env:
-          DB_CONNECTION: mysql
-          DB_HOST: mysql-test
-          DB_PORT: 3306
-          DB_DATABASE: laravel_test
-          DB_USERNAME: laravel
-          DB_PASSWORD: ${{ secrets.DB_TEST_PASSWORD }}
-        run: php artisan test
+        run: |
+          docker run --rm -v $(pwd):/var/www --network host \
+            -e DB_CONNECTION=mysql \
+            -e DB_HOST=127.0.0.1 \
+            -e DB_PORT=3306 \
+            -e DB_DATABASE=laravel_test \
+            -e DB_USERNAME=laravel \
+            -e DB_PASSWORD=${{ secrets.DB_TEST_PASSWORD }} \
+            laravel-practice-test php artisan test
 
       - name: Login to Docker Hub
         uses: docker/login-action@v3
