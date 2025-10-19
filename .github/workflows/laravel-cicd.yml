@@ -1,4 +1,4 @@
-name: Laravel CI/CD (COMPLETE FIX)
+name: Laravel CI/CD (PRACTICE)
 
 on:
   push:
@@ -18,7 +18,7 @@ jobs:
           MYSQL_ROOT_PASSWORD: root
           MYSQL_DATABASE: laravel_test
           MYSQL_USER: laravel
-          MYSQL_PASSWORD: secret123
+          MYSQL_PASSWORD: ${{ secrets.DB_TEST_PASSWORD }}
         ports:
           - 3306:3306
         options: >-
@@ -36,12 +36,13 @@ jobs:
 
       - name: Wait for MySQL to be ready
         run: |
+          echo "⏳ Waiting for MySQL..."
           for i in {1..30}; do
-            if timeout 5 mysql -hmysql -ularavel -p'secret123' -e 'SELECT 1;' 2>/dev/null; then
+            if timeout 5 mysql -h127.0.0.1 -P3306 -ularavel -p'${{ secrets.DB_TEST_PASSWORD }}' -e 'SELECT 1;' 2>/dev/null; then
               echo "✅ MySQL is ready!"
               break
             fi
-            echo "⏳ MySQL not ready ($i/30)"
+            echo "MySQL not ready yet ($i/30)"
             sleep 2
           done
 
@@ -62,11 +63,11 @@ jobs:
         run: |
           docker run --rm -v $(pwd):/var/www \
             -e DB_CONNECTION=mysql \
-            -e DB_HOST=mysql \
+            -e DB_HOST=127.0.0.1 \
             -e DB_PORT=3306 \
             -e DB_DATABASE=laravel_test \
             -e DB_USERNAME=laravel \
-            -e DB_PASSWORD=secret123 \
+            -e DB_PASSWORD="${{ secrets.DB_TEST_PASSWORD }}" \
             laravel-practice-test \
             /bin/sh -c "php artisan migrate --force"
 
@@ -74,48 +75,34 @@ jobs:
         run: |
           docker run --rm -v $(pwd):/var/www \
             -e DB_CONNECTION=mysql \
-            -e DB_HOST=mysql \
+            -e DB_HOST=127.0.0.1 \
             -e DB_PORT=3306 \
             -e DB_DATABASE=laravel_test \
             -e DB_USERNAME=laravel \
-            -e DB_PASSWORD=secret123 \
+            -e DB_PASSWORD="${{ secrets.DB_TEST_PASSWORD }}" \
             laravel-practice-test \
             /bin/sh -c "php artisan test"
 
-      - name: Login to Docker Hub
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_PASSWORD }}
-
-      - name: Build & Push Docker Image
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          file: Dockerfile
-          push: true
-          tags: |
-            ${{ secrets.DOCKER_USERNAME }}/laravel-practice:${{ github.sha }}
-            ${{ secrets.DOCKER_USERNAME }}/laravel-practice:latest
+      - name: ✅ CI Complete!
+        run: echo "🎉 All tests passed! Ready for CD practice!"
 
   cd:
-    name: CD - Deploy to Server
+    name: CD - Simulate Deployment
     needs: ci
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
 
     steps:
-      - name: Deploy to Server
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.SERVER_HOST }}
-          username: ${{ secrets.SERVER_USER }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          script: |
-            cd /var/www/laravel
-            docker compose down --remove-orphans
-            docker pull ${{ secrets.DOCKER_USERNAME }}/laravel-practice:latest
-            docker compose up -d
-            sleep 15
-            docker exec laravel_app php artisan migrate --force
-            echo "🚀 Deployment Complete!"
+      - name: Simulate Production Deployment
+        run: |
+          echo "🚀 === CD PRACTICE START ==="
+          echo "📦 Pulling latest image: GChamindu/laravel-practice:${{ github.sha }}"
+          echo "🐳 docker compose down --remove-orphans"
+          echo "🐳 docker compose up -d"
+          echo "⏳ Waiting 15s for containers..."
+          echo "🔧 Running migrations..."
+          echo "docker exec laravel_app php artisan migrate --force"
+          echo "⚡ Optimizing cache..."
+          echo "docker exec laravel_app php artisan optimize"
+          echo "🌐 App live at: http://your-server.com"
+          echo "✅ === CD PRACTICE COMPLETE! ==="
