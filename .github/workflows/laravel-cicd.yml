@@ -1,4 +1,4 @@
-name: Laravel CI/CD
+name: Laravel CI/CD (Practice)
 
 on:
   push:
@@ -8,18 +8,19 @@ on:
 
 jobs:
   ci:
+    name: CI - Build & Test
     runs-on: ubuntu-latest
 
     services:
       mysql-test:
         image: mysql:8.0
         env:
-          MYSQL_ROOT_PASSWORD: testroot
+          MYSQL_ROOT_PASSWORD: root
           MYSQL_DATABASE: laravel_test
           MYSQL_USER: laravel
           MYSQL_PASSWORD: ${{ secrets.DB_TEST_PASSWORD }}
         ports:
-          - 3306:3306  # Simplified; Actions uses container port
+          - 3306:3306
         options: >-
           --health-cmd "mysqladmin ping --silent"
           --health-interval 10s
@@ -30,29 +31,29 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Build Test Image
-        run: docker build -t laravel-test .
+      - name: Build Docker Test Image
+        run: docker build -t laravel-practice-test .
 
-      - name: Run Composer in Docker
-        run: docker run --rm -v $(pwd):/var/www laravel-test composer install --no-interaction --prefer-dist --optimize-autoloader
+      - name: Install Composer dependencies
+        run: docker run --rm -v $(pwd):/var/www laravel-practice-test composer install --no-dev --optimize-autoloader
 
       - name: Generate App Key
-        run: docker run --rm -v $(pwd):/var/www laravel-test php artisan key:generate --force
+        run: docker run --rm -v $(pwd):/var/www laravel-practice-test php artisan key:generate --force
 
-      - name: Set Permissions
+      - name: Set Storage Permissions
         run: chmod -R 777 storage bootstrap/cache
 
-      - name: Run Migrations and Tests in Docker
+      - name: Run Migrations & Tests
         env:
           DB_CONNECTION: mysql
-          DB_HOST: mysql-test
+          DB_HOST: 127.0.0.1
           DB_PORT: 3306
           DB_DATABASE: laravel_test
           DB_USERNAME: laravel
           DB_PASSWORD: ${{ secrets.DB_TEST_PASSWORD }}
         run: |
-          docker run --rm -v $(pwd):/var/www --network host laravel-test php artisan migrate --force
-          docker run --rm -v $(pwd):/var/www --network host laravel-test php artisan test
+          docker run --rm -v $(pwd):/var/www --network host laravel-practice-test php artisan migrate --force
+          docker run --rm -v $(pwd):/var/www --network host laravel-practice-test php artisan test
 
       - name: Login to Docker Hub
         uses: docker/login-action@v3
@@ -60,31 +61,27 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
-      - name: Build and Push Docker Image
+      - name: Build & Push Docker Image
         uses: docker/build-push-action@v5
         with:
           context: .
           file: Dockerfile
           push: true
-          tags: ${{ secrets.DOCKER_USERNAME }}/laravel-app:${{ github.sha }}, ${{ secrets.DOCKER_USERNAME }}/laravel-app:latest
+          tags: ${{ secrets.DOCKER_USERNAME }}/laravel-practice:${{ github.sha }},${{ secrets.DOCKER_USERNAME }}/laravel-practice:latest
+
 
   cd:
+    name: CD - Simulate Deployment
     needs: ci
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
 
     steps:
-      - name: Deploy to Server
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.SERVER_HOST }}
-          username: ${{ secrets.SERVER_USER }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          script: |
-            cd /var/www/laravel  # Your server path
-            docker compose -f docker-compose.prod.yml down --remove-orphans
-            docker pull ${{ secrets.DOCKER_USERNAME }}/laravel-app:latest
-            docker compose -f docker-compose.prod.yml up -d
-            docker exec laravel_app php artisan migrate --force
-            docker exec laravel_app php artisan optimize:clear
-            docker exec laravel_app php artisan optimize
+      - name: Pull latest Docker Image (simulate deployment)
+        run: |
+          echo "Simulating pulling Docker image..."
+          echo "docker pull ${{ secrets.DOCKER_USERNAME }}/laravel-practice:latest"
+          echo "docker compose down && docker compose up -d"
+          echo "php artisan migrate --force"
+          echo "php artisan optimize"
+          echo "✅ CI/CD practice complete!"
