@@ -2,110 +2,89 @@ name: Laravel CI/CD
 
 on:
   push:
-    branches: [ main ]
+    branches: [ "main" ]
   pull_request:
-    branches: [ main ]
+    branches: [ "main" ]
 
 jobs:
   ci:
     runs-on: ubuntu-latest
 
     services:
-      mysql-test:  # Temp DB for tests
+      mysql-test:
         image: mysql:8.0
         env:
           MYSQL_ROOT_PASSWORD: testroot
           MYSQL_DATABASE: laravel_test
           MYSQL_USER: laravel
-          MYSQL_PASSWORD: ${{ secrets.DB_TEST_PASSWORD }}  # Use secret for consistency
+          MYSQL_PASSWORD: ${{ secrets.DB_TEST_PASSWORD }}
         ports:
-          - 3307:3306
+          - 3306:3306  # Simplified; Actions uses container port
         options: >-
-          --health-cmd "mysqladmin ping"
+          --health-cmd "mysqladmin ping --silent"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
 
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-    - name: Set up PHP
-      uses: shivammathur/setup-php@v2
-      with:
-        php-version: '8.2'
+      - name: Build Test Image
+        run: docker build -t laravel-test .
 
-    - name: Install Composer dependencies
-      run: |
-        # Copy example env if it doesn't exist
-        cp .env.example .env || touch .env
-        # Override DB settings for CI tests
-        echo "DB_DATABASE=laravel_test" >> .env
-        echo "DB_USERNAME=laravel" >> .env
-        echo "DB_PASSWORD=${{ secrets.DB_TEST_PASSWORD }}" >> .env
-        echo "DB_HOST=mysql-test" >> .env
-        echo "DB_PORT=3306" >> .env
-        # Install all dependencies (prod + dev) for CI needs like linting and tests
-        composer install --no-interaction --prefer-dist --optimize-autoloader
+      - name: Run Composer in Docker
+        run: docker run --rm -v $(pwd):/var/www laravel-test composer install --no-interaction --prefer-dist --optimize-autoloader
 
-    - name: Lint code
-      run: composer run lint  # Assumes "lint": "phpcs" in composer.json; add if missing
+      - name: Generate App Key
+        run: docker run --rm -v $(pwd):/var/www laravel-test php artisan key:generate --force
 
-    - name: Generate app key
-      run: php artisan key:generate --force
+      - name: Set Permissions
+        run: chmod -R 777 storage bootstrap/cache
 
-    - name: Wait for MySQL to be ready
-      run: |
-        while ! nc -z mysql-test 3306; do
-          echo "Waiting for MySQL..."
-          sleep 1
-        done
+      - name: Run Migrations and Tests in Docker
+        env:
+          DB_CONNECTION: mysql
+          DB_HOST: mysql-test
+          DB_PORT: 3306
+          DB_DATABASE: laravel_test
+          DB_USERNAME: laravel
+          DB_PASSWORD: ${{ secrets.DB_TEST_PASSWORD }}
+        run: |
+          docker run --rm -v $(pwd):/var/www --network host laravel-test php artisan migrate --force
+          docker run --rm -v $(pwd):/var/www --network host laravel-test php artisan test
 
-    - name: Run migrations for tests
-      run: php artisan migrate --force
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
 
-    - name: Run PHPUnit tests
-      run: php artisan test
-
-    - name: Login to Docker Hub
-      uses: docker/login-action@v3
-      with:
-        username: ${{ secrets.DOCKER_USERNAME }}
-        password: ${{ secrets.DOCKER_PASSWORD }}
-
-    - name: Build and push Docker image
-      uses: docker/build-push-action@v5
-      with:
-        context: .
-        file: Dockerfile
-        push: true
-        tags: ${{ secrets.DOCKER_USERNAME }}/laravel-app:${{ github.sha }}, ${{ secrets.DOCKER_USERNAME }}/laravel-app:latest
+      - name: Build and Push Docker Image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: Dockerfile
+          push: true
+          tags: ${{ secrets.DOCKER_USERNAME }}/laravel-app:${{ github.sha }}, ${{ secrets.DOCKER_USERNAME }}/laravel-app:latest
 
   cd:
-    needs: ci  # Only if CI passes
+    needs: ci
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'  # Prod only
+    if: github.ref == 'refs/heads/main'
 
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-
-    - name: Deploy to server
-      uses: appleboy/ssh-action@v1.0.0
-      with:
-        host: ${{ secrets.SERVER_HOST }}
-        username: ${{ secrets.SERVER_USER }}
-        key: ${{ secrets.SSH_PRIVATE_KEY }}
-        script: |
-          cd /path/to/your/project  # e.g., /var/www/laravel - update to your actual path
-          git pull origin main
-          docker compose down --remove-orphans
-          docker pull ${{ secrets.DOCKER_USERNAME }}/laravel-app:latest
-          # Assuming docker-compose.yml uses 'image:' for app in prod; otherwise, update it here
-          docker compose up -d
-          sleep 15
-          docker exec -i laravel_app php artisan migrate --force || true
-          docker exec -i laravel_app php artisan cache:clear || true
-          docker exec -i laravel_app php artisan config:clear || true
-          docker exec -i laravel_app php artisan route:clear || true
-          docker exec -i laravel_app php artisan view:clear || true
+      - name: Deploy to Server
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            cd /var/www/laravel  # Your server path
+            docker compose -f docker-compose.prod.yml down --remove-orphans
+            docker pull ${{ secrets.DOCKER_USERNAME }}/laravel-app:latest
+            docker compose -f docker-compose.prod.yml up -d
+            docker exec laravel_app php artisan migrate --force
+            docker exec laravel_app php artisan optimize:clear
+            docker exec laravel_app php artisan optimize
