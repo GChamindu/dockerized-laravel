@@ -2,9 +2,9 @@ name: Laravel CI/CD (Practice)
 
 on:
   push:
-    branches: [ "main" ]
+    branches: ["main"]
   pull_request:
-    branches: [ "main" ]
+    branches: ["main"]
 
 jobs:
   ci:
@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
 
     services:
-      mysql-test:
+      mysql:
         image: mysql:8.0
         env:
           MYSQL_ROOT_PASSWORD: root
@@ -31,68 +31,66 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # Build the Laravel Docker container
-      - name: Build Docker Test Image
+      - name: Build Docker image
         run: docker build -t laravel-practice-test .
 
-      # Copy .env.example to .env
       - name: Copy .env.example to .env
         run: cp .env.example .env
 
-      # Install composer dependencies inside container
-      - name: Install Composer dependencies
-        run: docker run --rm -v $(pwd):/var/www laravel-practice-test composer install --no-interaction --prefer-dist --optimize-autoloader
-
-      # Generate application key
-      - name: Generate App Key
-        run: docker run --rm -v $(pwd):/var/www laravel-practice-test php artisan key:generate --force
-
-      # Set storage permissions inside container
-      - name: Set Storage Permissions
-        run: docker run --rm -v $(pwd):/var/www laravel-practice-test bash -c "chmod -R 777 storage bootstrap/cache"
-
-      # Wait for MySQL to be ready
-      - name: Wait for MySQL service
+      - name: Wait for MySQL to be ready
         run: |
           echo "Waiting for MySQL..."
           for i in {1..30}; do
-            docker run --rm -v $(pwd):/var/www laravel-practice-test \
-              bash -c "mysql -hmysql-test -ularavel -p${{ secrets.DB_TEST_PASSWORD }} -e 'SELECT 1;'" && break
-            echo "MySQL not ready yet... retrying"
+            docker run --rm --network host laravel-practice-test \
+              bash -c "mysql -hmysql -ularavel -p'${{ secrets.DB_TEST_PASSWORD }}' -e 'SELECT 1;'" && break
+            echo "MySQL not ready yet, retrying..."
             sleep 2
           done
           echo "MySQL is ready!"
 
-      # Run migrations inside container
+      - name: Install Composer dependencies
+        run:
+          docker run --rm -v $(pwd):/var/www --network host laravel-practice-test \
+          composer install --no-interaction --prefer-dist --optimize-autoloader
+
+      - name: Generate App Key
+        run:
+          docker run --rm -v $(pwd):/var/www --network host laravel-practice-test \
+          php artisan key:generate --force
+
+      - name: Set Storage Permissions
+        run:
+          docker run --rm -v $(pwd):/var/www --network host laravel-practice-test \
+          bash -c "chmod -R 777 storage bootstrap/cache"
+
       - name: Run Migrations
-        run: docker run --rm -v $(pwd):/var/www \
+        run:
+          docker run --rm -v $(pwd):/var/www --network host laravel-practice-test \
           -e DB_CONNECTION=mysql \
-          -e DB_HOST=mysql-test \
+          -e DB_HOST=mysql \
           -e DB_PORT=3306 \
           -e DB_DATABASE=laravel_test \
           -e DB_USERNAME=laravel \
-          -e DB_PASSWORD=${{ secrets.DB_TEST_PASSWORD }} \
-          laravel-practice-test php artisan migrate --force
+          -e DB_PASSWORD="${{ secrets.DB_TEST_PASSWORD }}" \
+          php artisan migrate --force
 
-      # Run tests inside container
       - name: Run Tests
-        run: docker run --rm -v $(pwd):/var/www \
+        run:
+          docker run --rm -v $(pwd):/var/www --network host laravel-practice-test \
           -e DB_CONNECTION=mysql \
-          -e DB_HOST=mysql-test \
+          -e DB_HOST=mysql \
           -e DB_PORT=3306 \
           -e DB_DATABASE=laravel_test \
           -e DB_USERNAME=laravel \
-          -e DB_PASSWORD=${{ secrets.DB_TEST_PASSWORD }} \
-          laravel-practice-test php artisan test
+          -e DB_PASSWORD="${{ secrets.DB_TEST_PASSWORD }}" \
+          php artisan test
 
-      # Login to Docker Hub
       - name: Login to Docker Hub
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
-      # Build & Push Docker Image
       - name: Build & Push Docker Image
         uses: docker/build-push-action@v5
         with:
