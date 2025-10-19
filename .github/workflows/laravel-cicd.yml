@@ -1,4 +1,4 @@
-name: Laravel CI/CD (PRACTICE - FIXED MYSQL)
+name: Laravel CI/CD (PRACTICE - FINAL FIX)
 
 on:
   push:
@@ -22,7 +22,7 @@ jobs:
         ports:
           - 3306:3306
         options: >-
-          --health-cmd "mysqladmin ping -h localhost -uroot -proot"
+          --health-cmd "mysqladmin ping -h localhost"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
@@ -38,8 +38,7 @@ jobs:
         run: |
           echo "Waiting for MySQL..."
           for i in {1..30}; do
-            if docker run --rm --network container:mysql laravel-practice-test \
-              mysql -h mysql -ularavel -p'${{ secrets.DB_TEST_PASSWORD }}' -e 'SELECT 1;' 2>/dev/null; then
+            if nc -z 127.0.0.1 3306 2>/dev/null; then
               echo "MySQL is ready!"
               break
             fi
@@ -49,7 +48,7 @@ jobs:
 
       - name: Install Composer dependencies
         run: |
-          docker run --rm -v $(pwd):/var/www laravel-practice-test \
+          docker run --rm -v $(pwd):/var/www -p 9000:9000 laravel-practice-test \
             /bin/sh -c "composer install --no-interaction --prefer-dist --optimize-autoloader"
 
       - name: Generate App Key & Fix Permissions
@@ -64,25 +63,27 @@ jobs:
 
       - name: Run Migrations
         run: |
-          docker run --rm -v $(pwd):/var/www --network container:mysql \
+          docker run --rm -v $(pwd):/var/www \
             -e DB_CONNECTION=mysql \
-            -e DB_HOST=mysql \
+            -e DB_HOST=host.docker.internal \
             -e DB_PORT=3306 \
             -e DB_DATABASE=laravel_test \
             -e DB_USERNAME=laravel \
             -e DB_PASSWORD="${{ secrets.DB_TEST_PASSWORD }}" \
+            --add-host=host.docker.internal:host-gateway \
             laravel-practice-test \
             /bin/sh -c "php artisan migrate --force"
 
       - name: Run Tests
         run: |
-          docker run --rm -v $(pwd):/var/www --network container:mysql \
+          docker run --rm -v $(pwd):/var/www \
             -e DB_CONNECTION=mysql \
-            -e DB_HOST=mysql \
+            -e DB_HOST=host.docker.internal \
             -e DB_PORT=3306 \
             -e DB_DATABASE=laravel_test \
             -e DB_USERNAME=laravel \
             -e DB_PASSWORD="${{ secrets.DB_TEST_PASSWORD }}" \
+            --add-host=host.docker.internal:host-gateway \
             laravel-practice-test \
             /bin/sh -c "php artisan test"
 
