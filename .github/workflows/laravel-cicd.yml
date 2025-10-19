@@ -22,7 +22,7 @@ jobs:
         ports:
           - 3306:3306
         options: >-
-          --health-cmd "mysqladmin ping --silent"
+          --health-cmd "mysqladmin ping -h localhost -uroot -proot"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
@@ -40,39 +40,39 @@ jobs:
       - name: Generate App Key
         run: docker run --rm -v $(pwd):/var/www laravel-practice-test php artisan key:generate --force
 
-      - name: Set Storage Permissions
+      - name: Set Storage Permissions inside container
         run: docker run --rm -v $(pwd):/var/www laravel-practice-test bash -c "chmod -R 777 storage bootstrap/cache"
 
-      - name: Wait for MySQL to be ready
+      - name: Wait for MySQL service
         run: |
           echo "Waiting for MySQL..."
-          until docker run --rm --network host laravel-practice-test \
-            bash -c "mysql -h 127.0.0.1 -P 3306 -u laravel -p${{ secrets.DB_TEST_PASSWORD }} -e 'SELECT 1;'" &> /dev/null; do
+          for i in {1..30}; do
+            docker run --rm -v $(pwd):/var/www laravel-practice-test \
+              bash -c "mysql -hmysql-test -ularavel -p${{ secrets.DB_TEST_PASSWORD }} -e 'SELECT 1;'" && break
+            echo "MySQL not ready yet... retrying"
             sleep 2
           done
           echo "MySQL is ready!"
 
       - name: Run Migrations
-        run: |
-          docker run --rm -v $(pwd):/var/www --network host \
-            -e DB_CONNECTION=mysql \
-            -e DB_HOST=127.0.0.1 \
-            -e DB_PORT=3306 \
-            -e DB_DATABASE=laravel_test \
-            -e DB_USERNAME=laravel \
-            -e DB_PASSWORD=${{ secrets.DB_TEST_PASSWORD }} \
-            laravel-practice-test php artisan migrate --force
+        run: docker run --rm -v $(pwd):/var/www \
+          -e DB_CONNECTION=mysql \
+          -e DB_HOST=mysql-test \
+          -e DB_PORT=3306 \
+          -e DB_DATABASE=laravel_test \
+          -e DB_USERNAME=laravel \
+          -e DB_PASSWORD=${{ secrets.DB_TEST_PASSWORD }} \
+          laravel-practice-test php artisan migrate --force
 
       - name: Run Tests
-        run: |
-          docker run --rm -v $(pwd):/var/www --network host \
-            -e DB_CONNECTION=mysql \
-            -e DB_HOST=127.0.0.1 \
-            -e DB_PORT=3306 \
-            -e DB_DATABASE=laravel_test \
-            -e DB_USERNAME=laravel \
-            -e DB_PASSWORD=${{ secrets.DB_TEST_PASSWORD }} \
-            laravel-practice-test php artisan test
+        run: docker run --rm -v $(pwd):/var/www \
+          -e DB_CONNECTION=mysql \
+          -e DB_HOST=mysql-test \
+          -e DB_PORT=3306 \
+          -e DB_DATABASE=laravel_test \
+          -e DB_USERNAME=laravel \
+          -e DB_PASSWORD=${{ secrets.DB_TEST_PASSWORD }} \
+          laravel-practice-test php artisan test
 
       - name: Login to Docker Hub
         uses: docker/login-action@v3
