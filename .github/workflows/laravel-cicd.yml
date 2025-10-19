@@ -1,4 +1,4 @@
-name: Laravel CI/CD (PRACTICE)
+name: Laravel CI/CD (PRACTICE - FIXED PERMISSIONS)
 
 on:
   push:
@@ -51,13 +51,15 @@ jobs:
           docker run --rm -v $(pwd):/var/www laravel-practice-test \
             /bin/sh -c "composer install --no-interaction --prefer-dist --optimize-autoloader"
 
-      - name: Generate App Key
+      - name: Generate App Key & Fix Permissions
         run: |
           docker run --rm -v $(pwd):/var/www laravel-practice-test \
-            /bin/sh -c "cp .env.example .env && php artisan key:generate --force"
-
-      - name: Set Storage Permissions
-        run: chmod -R 777 storage bootstrap/cache
+            /bin/sh -c "
+              cp .env.example .env &&
+              php artisan key:generate --force &&
+              mkdir -p storage bootstrap/cache &&
+              chmod -R 777 storage bootstrap/cache
+            "
 
       - name: Run Migrations
         run: |
@@ -96,7 +98,7 @@ jobs:
       - name: Simulate Production Deployment
         run: |
           echo "🚀 === CD PRACTICE START ==="
-          echo "📦 Pulling latest image: GChamindu/laravel-practice:${{ github.sha }}"
+          echo "📦 Pulling latest image..."
           echo "🐳 docker compose down --remove-orphans"
           echo "🐳 docker compose up -d"
           echo "⏳ Waiting 15s for containers..."
