@@ -108,5 +108,5 @@ jobs:
           echo "docker exec laravel_app php artisan migrate --force"
           echo "Optimizing cache..."
           echo "docker exec laravel_app php artisan optimize"
-          echo "App live at: http://your-server.com"
+          echo "App live at: https://katta.lk"
           echo "CD PRACTICE COMPLETE"
