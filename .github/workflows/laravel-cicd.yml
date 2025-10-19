@@ -40,6 +40,7 @@ jobs:
       - name: Generate App Key
         run: docker run --rm -v $(pwd):/var/www laravel-practice-test php artisan key:generate --force
 
+
       - name: Set Storage Permissions
         run: chmod -R 777 storage bootstrap/cache
 
