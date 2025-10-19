@@ -1,4 +1,4 @@
-name: Laravel CI/CD (PRACTICE - FIXED PERMISSIONS)
+name: Laravel CI/CD (PRACTICE - FIXED MYSQL)
 
 on:
   push:
@@ -36,10 +36,11 @@ jobs:
 
       - name: Wait for MySQL to be ready
         run: |
-          echo "⏳ Waiting for MySQL..."
+          echo "Waiting for MySQL..."
           for i in {1..30}; do
-            if timeout 5 mysql -h127.0.0.1 -P3306 -ularavel -p'${{ secrets.DB_TEST_PASSWORD }}' -e 'SELECT 1;' 2>/dev/null; then
-              echo "✅ MySQL is ready!"
+            if docker run --rm --network container:mysql laravel-practice-test \
+              mysql -h mysql -ularavel -p'${{ secrets.DB_TEST_PASSWORD }}' -e 'SELECT 1;' 2>/dev/null; then
+              echo "MySQL is ready!"
               break
             fi
             echo "MySQL not ready yet ($i/30)"
@@ -63,9 +64,9 @@ jobs:
 
       - name: Run Migrations
         run: |
-          docker run --rm -v $(pwd):/var/www \
+          docker run --rm -v $(pwd):/var/www --network container:mysql \
             -e DB_CONNECTION=mysql \
-            -e DB_HOST=127.0.0.1 \
+            -e DB_HOST=mysql \
             -e DB_PORT=3306 \
             -e DB_DATABASE=laravel_test \
             -e DB_USERNAME=laravel \
@@ -75,9 +76,9 @@ jobs:
 
       - name: Run Tests
         run: |
-          docker run --rm -v $(pwd):/var/www \
+          docker run --rm -v $(pwd):/var/www --network container:mysql \
             -e DB_CONNECTION=mysql \
-            -e DB_HOST=127.0.0.1 \
+            -e DB_HOST=mysql \
             -e DB_PORT=3306 \
             -e DB_DATABASE=laravel_test \
             -e DB_USERNAME=laravel \
@@ -85,8 +86,8 @@ jobs:
             laravel-practice-test \
             /bin/sh -c "php artisan test"
 
-      - name: ✅ CI Complete!
-        run: echo "🎉 All tests passed! Ready for CD practice!"
+      - name: CI Complete
+        run: echo "All tests passed! Ready for CD practice!"
 
   cd:
     name: CD - Simulate Deployment
@@ -97,14 +98,14 @@ jobs:
     steps:
       - name: Simulate Production Deployment
         run: |
-          echo "🚀 === CD PRACTICE START ==="
-          echo "📦 Pulling latest image..."
-          echo "🐳 docker compose down --remove-orphans"
-          echo "🐳 docker compose up -d"
-          echo "⏳ Waiting 15s for containers..."
-          echo "🔧 Running migrations..."
+          echo "CD PRACTICE START"
+          echo "Pulling latest image..."
+          echo "docker compose down --remove-orphans"
+          echo "docker compose up -d"
+          echo "Waiting 15s for containers..."
+          echo "Running migrations..."
           echo "docker exec laravel_app php artisan migrate --force"
-          echo "⚡ Optimizing cache..."
+          echo "Optimizing cache..."
           echo "docker exec laravel_app php artisan optimize"
-          echo "🌐 App live at: http://your-server.com"
-          echo "✅ === CD PRACTICE COMPLETE! ==="
+          echo "App live at: http://your-server.com"
+          echo "CD PRACTICE COMPLETE"
